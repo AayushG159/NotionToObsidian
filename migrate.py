@@ -1,5 +1,6 @@
 import logging
 import re
+import os
 from shutil import move
 from pathlib import Path
 from notion_db import convert_notion_db_data
@@ -26,9 +27,50 @@ class Migrate:
         """
         self.traverse_rename(current_dir=self.root_loc)
         self.format_files()
+        self.move_attachments_format_links('Attachments')
 
     def move_attachments_format_links(self, folder_name):
-        pass
+        """
+        Fetches attachment directories list stored and performs the following:
+        1. Renames files to it's directory with incremental suffix
+        2. Moves the attachments to a designated folder at root location
+        3. Format attachment links present in notes
+        :param folder_name: desired attachments folder name
+        :return: None
+        """
+        folder_name_path = Path(self.root_loc, folder_name)
+        if not os.path.exists(folder_name_path):
+            os.mkdir(folder_name_path)
+        notion_file_pattern = re.compile(r'(Untitled|untitled)[\s0-9]*')
+        markdown_embed_pattern = re.compile(r'!\[.*?\]\((.*?)\)')
+        for att_dir in self.attachments:
+            att_dir = Path(att_dir)
+            if not att_dir.is_dir():
+                continue
+            index = 0
+            new_path_list = dict()
+            for att_file in att_dir.iterdir():
+                att_file = Path(att_file)
+                match = re.search(notion_file_pattern, str(att_file))
+                new_file_name = att_file.name
+                if match:
+                    suffix = att_file.suffix
+                    new_file_name = att_file.parents[0].name + ' - ' + str(index) + suffix
+                    index += 1
+                old_path = str(att_file.relative_to(att_dir.parents[0])).replace('\\', '/').replace(' ', '%20')
+                new_path = str(move(Path(att_file), Path(folder_name_path, new_file_name)))
+                new_path_list[old_path] = str(Path(new_path).relative_to(Path(self.root_loc))).replace('\\', '/')
+            # opening corresponding markdown file
+            md_file = str(att_dir) + Migrate.MARKDOWN_SUFFIX
+            with open(md_file, 'r', encoding='utf-8') as file:
+                md_file_data = file.readlines()
+            for i, line in enumerate(md_file_data):
+                if re.search(markdown_embed_pattern, line):
+                    embed_path = line.rstrip()[line.index('(')+1: -1]
+                    line = '![[' + new_path_list[embed_path] + ']]'
+                    md_file_data[i] = line
+            with open(md_file, 'w', encoding='utf-8') as file:
+                file.writelines(md_file_data)
 
     def format_files(self):
         """
@@ -47,6 +89,11 @@ class Migrate:
                 continue
 
     def remove_uuid_refs(self, path):
+        """
+        Replaces uuid (extracted during traverse_rename()) in file content
+        :param path: file_path
+        :return: None
+        """
         with open(path, 'r+', encoding='utf-8') as file:
             file_data = file.read()
             for hex_number in self.uuid:

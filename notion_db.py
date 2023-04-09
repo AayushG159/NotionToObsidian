@@ -9,6 +9,7 @@ date_regex = re.compile(r'[\d]{4}/[\d]{1,2}/[\d]{1,2}')
 
 def convert_notion_db_data(file_path, root_path):
     """
+    #TODO: Add support for multiple date-formats
     Performs the following steps:
     1. Read csv and extract headers from it
     2. Navigate to corresponding dir using name extracted
