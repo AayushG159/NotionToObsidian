@@ -2,6 +2,7 @@ import csv
 import logging
 import re
 from pathlib import Path
+from util import get_nested_tag
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 date_regex = re.compile(r'[\d]{4}/[\d]{1,2}/[\d]{1,2}')
@@ -52,15 +53,3 @@ def convert_notion_db_data(file_path, root_path):
             file.writelines(file_data[index[0]:])
         logging.info(f"Modified file {child_file.name}")
     logging.info(f"Completed modification of database in {dir_path.name}")
-
-
-def get_nested_tag(file_path, root):
-    """
-    Generate nested tag from relative file path
-    :param file_path: current directory path
-    :param root: root path
-    :return: nested tag
-    """
-    relative_file_path = Path(file_path).relative_to(Path(root))
-    tag_name = str(relative_file_path).replace(' ', '').replace('\\', '/')
-    return tag_name
