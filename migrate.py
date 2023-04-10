@@ -4,6 +4,7 @@ import os
 from shutil import move
 from pathlib import Path
 from notion_db import convert_notion_db_data
+from util import get_nested_tag
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 
@@ -13,6 +14,8 @@ class Migrate:
     MARKDOWN_SUFFIX = '.md'
     CSV_SUFFIX = '.csv'
     MARKDOWN_CSV_SUFFIX = [MARKDOWN_SUFFIX, CSV_SUFFIX]
+    NOTION_FILE_PATTERN = re.compile(r'(Untitled|untitled)[\s0-9]*')
+    MARKDOWN_EMBED_PATTERN = re.compile(r'!\[.*?\]\((.*?)\)')
 
     def __init__(self, root_loc):
         self.uuid = set()
@@ -28,6 +31,59 @@ class Migrate:
         self.traverse_rename(current_dir=self.root_loc)
         self.format_files()
         self.move_attachments_format_links('Attachments')
+        self.notes_tags_move_resolve('Attachments')
+        self.resolve_internal_links()
+
+    def notes_tags_move_resolve(self, folder_name):
+        """
+        Performs the following:
+        1. Add nested tag based on file path
+        2. Checks for internal links and resolves them in advance for notes movement in the following step
+        3. Moves notes to root location
+        :param folder_name: desired attachments folder name
+        :return: None
+        """
+        front_matter_str = '---'
+        for file in self.files:
+            file = Path(file)
+            if file.suffix == Migrate.MARKDOWN_SUFFIX:
+                logging.info(f"Adding nested tags in note: {file.name}")
+                is_file_changed = False
+                with open(file, 'r', encoding='utf-8') as f:
+                    file_data = f.readlines()
+                if file_data[0].rstrip() != front_matter_str:
+                    is_file_changed = True
+                    tag_property = 'tag: "' + get_nested_tag(file, self.root_loc) + '"\n'
+                    file_data[0] = front_matter_str + '\n' + tag_property + front_matter_str + '\n'
+                    # if re.search(Migrate.MARKDOWN_EMBED_PATTERN, line):
+                    #     embed_path = line.rstrip()[line.index('(') + 1: -1]
+                    #     file_data[i] = '[[' + embed_path + ']]'
+                if is_file_changed:
+                    with open(file, 'w', encoding='utf-8') as f:
+                        f.writelines(file_data)
+                move(file, Path(self.root_loc, file.name))
+            if file.suffix == Migrate.CSV_SUFFIX:
+                move(file, Path(self.root_loc, folder_name, file.name))
+            logging.info(f"Moved note: {file.name}")
+
+    def resolve_internal_links(self):
+        """
+        Resolves all internal links present in notes at root level
+        :return: None
+        """
+        logging.info(f"Resolving internal links")
+        for note in Path(self.root_loc).iterdir():
+            with open(note, 'r', encoding='utf-8') as f:
+                note_data = f.readlines()
+            for i, line in enumerate(note_data):
+                if re.search(Migrate.MARKDOWN_EMBED_PATTERN, line):
+                    embed_path = line.rstrip()[line.index('(') + 1: -1]
+                    if embed_path.rfind(Migrate.MARKDOWN_SUFFIX) > -1:
+                        line = '[[' + embed_path[embed_path.rfind('/')+1:] + ']]'
+                        note_data[i] = line
+            with open(note, 'w', encoding='utf-8') as f:
+                f.writelines(note_data)
+        logging.info(f"Resolved")
 
     def move_attachments_format_links(self, folder_name):
         """
@@ -41,17 +97,17 @@ class Migrate:
         folder_name_path = Path(self.root_loc, folder_name)
         if not os.path.exists(folder_name_path):
             os.mkdir(folder_name_path)
-        notion_file_pattern = re.compile(r'(Untitled|untitled)[\s0-9]*')
-        markdown_embed_pattern = re.compile(r'!\[.*?\]\((.*?)\)')
+        logging.info(f"Created designated folder for attachments: {folder_name}")
         for att_dir in self.attachments:
             att_dir = Path(att_dir)
             if not att_dir.is_dir():
                 continue
+            logging.info(f"Moving attachments from folder: {att_dir.name}")
             index = 0
             new_path_list = dict()
             for att_file in att_dir.iterdir():
                 att_file = Path(att_file)
-                match = re.search(notion_file_pattern, str(att_file))
+                match = re.search(Migrate.NOTION_FILE_PATTERN, str(att_file))
                 new_file_name = att_file.name
                 if match:
                     suffix = att_file.suffix
@@ -60,17 +116,19 @@ class Migrate:
                 old_path = str(att_file.relative_to(att_dir.parents[0])).replace('\\', '/').replace(' ', '%20')
                 new_path = str(move(Path(att_file), Path(folder_name_path, new_file_name)))
                 new_path_list[old_path] = str(Path(new_path).relative_to(Path(self.root_loc))).replace('\\', '/')
+                logging.info(f"Moved file attachments from folder: {att_file.name}")
             # opening corresponding markdown file
-            md_file = str(att_dir) + Migrate.MARKDOWN_SUFFIX
+            md_file = Path(str(att_dir) + Migrate.MARKDOWN_SUFFIX)
             with open(md_file, 'r', encoding='utf-8') as file:
                 md_file_data = file.readlines()
             for i, line in enumerate(md_file_data):
-                if re.search(markdown_embed_pattern, line):
+                if re.search(Migrate.MARKDOWN_EMBED_PATTERN, line):
                     embed_path = line.rstrip()[line.index('(')+1: -1]
                     line = '![[' + new_path_list[embed_path] + ']]'
                     md_file_data[i] = line
             with open(md_file, 'w', encoding='utf-8') as file:
                 file.writelines(md_file_data)
+            logging.info(f"Resolved attachments embeds in note: {md_file.name}")
 
     def format_files(self):
         """
