@@ -1,3 +1,4 @@
+import logging_config
 from migrate import Migrate
 
 if __name__ == '__main__':
