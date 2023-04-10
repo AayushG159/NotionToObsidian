@@ -13,3 +13,7 @@ It performs the following actions:
 ## Note:
 
 1. Attachments section has only been tried for images where screenshots were embedded into notes
+
+## Issues:
+
+1. When tag is already present in a notes' yaml front-matter, this tool will not append to it rather will create a new property
