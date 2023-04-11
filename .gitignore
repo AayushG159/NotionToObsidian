@@ -129,3 +129,6 @@ pyvenv.cfg
 Scripts/
 Include/
 Lib/
+
+#project specific
+resources/config.ini
