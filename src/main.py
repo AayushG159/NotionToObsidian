@@ -1,7 +1,9 @@
 import logging_config
 from migrate import Migrate
+from config import Config
 
 if __name__ == '__main__':
-    location = r'D:\Notion Exports\Export-36cee0fc-4028-4851-9087-8402cb3bd1d5'
-    migrate = Migrate(location)
+    config = Config()
+    location, attach_folder = config.get_config()
+    migrate = Migrate(location, attach_folder)
     migrate.start_migration()

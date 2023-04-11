@@ -18,11 +18,12 @@ class Migrate:
     MARKDOWN_EMBED_PATTERN = re.compile(r'!\[.*?\]\((.*?)\)')
     MARKDOWN_LINK_PATTERN = re.compile(r'\[.*?\]\((.*?)\)')
 
-    def __init__(self, root_loc):
+    def __init__(self, root_loc, attach_folder):
         self.uuid = set()
         self.files = set()
         self.attachments = set()
         self.root_loc = root_loc
+        self.attach_folder = attach_folder
 
     def start_migration(self):
         """
@@ -37,10 +38,10 @@ class Migrate:
         self.format_files()
         logger.info(f"Complete")
         logger.info(f"Renaming and moving attachments to designated folder. Also, resolving corresponding embeds in notes")
-        self.move_attachments_format_links('Attachments')
+        self.move_attachments_format_links(self.attach_folder)
         logger.info(f"Complete")
         logger.info(f"Adding nested tags as front-matter to notes, moving them to root location and resolving internal links")
-        self.notes_tags_move_resolve('Attachments')
+        self.notes_tags_move_resolve(self.attach_folder)
         logger.info(f"Complete")
 
     def notes_tags_move_resolve(self, folder_name):
